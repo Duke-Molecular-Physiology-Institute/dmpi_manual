@@ -1,0 +1,77 @@
+---
+title: "Duke Molecular Physiology Institute (DMPI) Manual"
+#author: "Duke Molecular Physiology Institute"
+format: html
+number-sections: true
+editor: source
+bibliography: bib.bib
+---
+
+## Introduction {#sec-intro}
+
+This section template is designed to give a step-by-step walk-through of the data analysis performed in @lyons_proteomics_2022, which served as a companion manuscript to @wilson_disruption_2022. The goal of the analysis was to determine the effects of STIM1 knockout (KO) on protein abundance and sites of protein phosphorylation in gastrocnemius muscle tissue using data from large-scale proteomics and phosphoproteomics experiments. The data considered here consist of protein abundance values obtained from five STIM<sup>fl/fl</sup> mice and five STIM<sup>-/-</sup> mice. The code used in this section is based on the R code accompanying the @lyons_proteomics_2022 article.
+
+Part of the goal of this section is to identify common steps in analyzing 'omics datasets, to organize them in an understandable way, and to provide examples of how to perform the analysis steps using R.
+
+## Before analysis {#sec-before}
+
+Depending on the nature of your experiment, you may be ready to analyze your data as soon as it comes off the machine, or there may be several steps of cleaning and pre-processing before it makes sense to draw conclusions from your data. This tutorial organizes the most common steps before data analysis into three categories: 1. loading the data, 2. filtering the data, and 3. normalizing the data.
+
+### Loading the data into R
+
+Before working with data in R, it needs to be loaded from the raw files that come off the machine (or other files that you have created) into R objects. In this tutorial we will be working with plain text files, which can be read with the R package `readr`. The package `readr` is part of a host of packages included in `tidyverse`, so we will load that, along with another package called `magrittr`, which will help us write concise code. Online documentation for all of these packages can be found in @sec-rdocs.
+
+```{r, message=F, warning=F}
+library(tidyverse)
+library(magrittr)
+```
+
+Since the files we are working with here have a `.txt` extension and are tab-separated, we can use the `read_tsv` command in the `readr` package to load them into R:
+
+```{r, message=F, warning=F}
+# load mito_carta file for mitochondria data
+mito_carta = readr::read_tsv("Mouse.MitoCarta3.0.txt")
+colnames(mito_carta)[[1]] = "GeneName"
+  
+# load the peptide and protein data
+peptides = readr::read_tsv("Muoio_BeckyWilson_STIM1-SKM_TMT10_FINAL_2020-05-03_SN2pt5_PeptideIsoforms.txt")
+proteins = readr::read_tsv("Muoio_BeckyWilson_STIM1-SKM_TMT10_FINAL_2020-05-03_SN2pt5_Proteins.txt")
+
+# create variables for the samples being compared and the total number of samples
+ID_names = c("WT", "KO", "pool") 
+total_number_of_samples = 11
+```
+
+Note that the `readr::read_tsv` syntax above is overkill; once we load the `tidyverse` library, we can use functions within an R package without specifying the package name. However, in a tutorial like this, writing out the package name can help with understanding where each function comes from. Doing so also provides a visual cue that we are using a function from an R package.
+
+Once you have loaded your data into an R object, it is always a good idea to visually inspect the R object to determine whether the data have been loaded correctly. You can preview tabular R objects, like the `proteins` object above, using the `View()` command as follows:
+
+```{r, eval=F}
+View(proteins)
+```
+
+### Filtering the data
+
+### Normalizing the data
+
+Some form of normalization is frequently required before drawing conclusions from 'omics datasets. There are two primary reasons for this: 
+
+1. The data that were recorded may have been subject to a systematic artifact that can be detected and potentially adjusted for. As an example, 
+2. The raw values that are measured by the 'omics technology do not correspond directly to the underlying value that we are interested in. The most common instance of this in biological samples is absolute vs. relative quantities.
+
+## Exploratory Data Analysis {#sec-eda}
+
+## Statistical testing {#sec-stattest}
+
+## Statistical language {#sec-statlang}
+
+## R docs {#sec-rdocs}
+
+- [magrittr](https://magrittr.tidyverse.org)
+- [readr](https://readr.tidyverse.org)
+- [tidyverse](https://www.tidyverse.org/packages/)
+
+## References
+
+::: {#refs}
+:::
