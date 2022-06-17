@@ -19,10 +19,11 @@ Depending on the nature of your experiment, you may be ready to analyze your dat
 
 ### Loading the data into R
 
-Before working with data in R, it needs to be loaded from the raw files that come off the machine (or other files that you have created) into R objects. In this tutorial we will be working with plain text files, which can be read with the R package `readr`. The package `readr` is part of a host of packages included in `tidyverse`, so we will load that, along with another package called `magrittr`, which will help us write concise code. Online documentation for all of these packages can be found in @sec-rdocs.
+Before working with data in R, it needs to be loaded from the raw files that come off the machine (or other files that you have created) into R objects. In this tutorial we will be working with plain text files, which can be read with the R package `readr`. The package `readr` is part of a host of packages included in `tidyverse`, so we will load that, along with other packages, which will help us write concise code. Online documentation for all of these packages can be found in @sec-rdocs.
 
 ```{r, message=F, warning=F}
 library(tidyverse)
+library(janitor)
 library(magrittr)
 ```
 
@@ -38,7 +39,7 @@ peptides = readr::read_tsv("Muoio_BeckyWilson_STIM1-SKM_TMT10_FINAL_2020-05-03_S
 proteins = readr::read_tsv("Muoio_BeckyWilson_STIM1-SKM_TMT10_FINAL_2020-05-03_SN2pt5_Proteins.txt")
 
 # create variables for the samples being compared and the total number of samples
-ID_names = c("WT", "KO", "pool") 
+ID_names = c("WT", "KO", "pool")
 total_number_of_samples = 11
 ```
 
@@ -52,12 +53,40 @@ View(proteins)
 
 ### Filtering the data
 
+Filtering data is the process of discarding pieces of a dataset that will not be used in subsequent normalization or analysis steps. It is a conceptually trivial step that can, in practice, take a fair amount of care, consideration, and time. The basic principle is that if some part of your primary dataset will not be used in subsequent steps, it is a good idea to trim this part from the R objects you are using to store your data.
+
+In our example, we will first filter our data by extracting the columns we need. We'll store these names in an R object:
+
+```{r}
+columns_to_extract = list(cols_protein = janitor::make_clean_names(c("Description", "Accession", "Master", "Exp. q-value: Combined",
+                                     "# Peptides", "# PSMs", "# Protein Unique Peptides", "# Unique Peptides", "Entrez Gene ID",
+                                      "Reactome Pathways", "WikiPathways")),
+                          cols_peptide = janitor::make_clean_names(c("Master Protein Accessions", "Protein Accessions", "Sequence",
+                                             "# Missed Cleavages", "PSM Ambiguity", "# PSMs", 
+                                             "Modifications", "Modifications in Proteins", "XCorr (by Search Engine): Sequest HT",
+                                             "Deltam/z [Da] (by Search Engine): Sequest HT"
+                                             )))
+```
+
+Then we will filter the protein and peptide R objects so that we remove the columns we don't need:
+
+```{r}
+filtered_proteins = proteins %>%
+                    janitor::clean_names() %>%
+                    dplyr::select(., dplyr::all_of(columns_to_extract[["cols_protein"]]), dplyr::starts_with("abundance_F2_"))
+
+filtered_peptides = peptides %>%
+                    janitor::clean_names() %>%
+                    dplyr::select(., dplyr::all_of(columns_to_extract[["cols_peptide"]]), dplyr::starts_with("abundance_F6_"))
+```
+
+
 ### Normalizing the data
 
 Some form of normalization is frequently required before drawing conclusions from 'omics datasets. There are two primary reasons for this: 
 
-1. The data that were recorded may have been subject to a systematic artifact that can be detected and potentially adjusted for. As an example, 
-2. The raw values that are measured by the 'omics technology do not correspond directly to the underlying value that we are interested in. The most common instance of this in biological samples is absolute vs. relative quantities.
+1. The data that were recorded may have been subject to a systematic artifact that can be detected and potentially adjusted for.
+2. The raw values that are measured by the 'omics technology do not correspond directly to the underlying value that we are interested in. For instance, measurement devices may measure absolute abundance of a biological product such as a protein, transcript, or metabolite, whereas we may be interested in the *relative* abundance of that product. The absolute value may be a function of the experimental protocol, rather than a function of the relevant biology.
 
 ## Exploratory Data Analysis {#sec-eda}
 
@@ -67,6 +96,7 @@ Some form of normalization is frequently required before drawing conclusions fro
 
 ## R docs {#sec-rdocs}
 
+- [janitor](https://www.rdocumentation.org/packages/janitor/versions/2.1.0)
 - [magrittr](https://magrittr.tidyverse.org)
 - [readr](https://readr.tidyverse.org)
 - [tidyverse](https://www.tidyverse.org/packages/)
