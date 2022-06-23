@@ -1,0 +1,9 @@
+# Resources
+
+## R docs {#sec-rdocs}
+
+- [janitor](https://www.rdocumentation.org/packages/janitor/versions/2.1.0)
+- [limma](https://www.bioconductor.org/packages/devel/bioc/vignettes/limma/inst/doc/usersguide.pdf)
+- [magrittr](https://magrittr.tidyverse.org)
+- [readr](https://readr.tidyverse.org)
+- [tidyverse](https://www.tidyverse.org/packages/)

@@ -1,0 +1,27 @@
+project:
+  type: book
+
+book:
+  title: "Duke Molecular Physiology Institute (DMPI) Handbook"
+  author: "Jordan Bryan"
+  date: "6/22/2022"
+  crossref:
+    chapters: true
+  chapters:
+    - index.qmd
+    - intro.qmd
+    - proteomics.qmd
+    - summary.qmd
+    - resources.qmd
+    - references.qmd
+
+bibliography: bib.bib
+
+format:
+  html:
+    theme: cosmo
+  pdf:
+    documentclass: scrreprt
+
+
+
