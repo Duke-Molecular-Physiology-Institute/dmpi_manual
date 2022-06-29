@@ -122,7 +122,7 @@ avg_protein_abundance = filtered_proteins %>%
 
 #
 normalized_proteins = filtered_proteins %>%
-                      dplyr::mutate_at(dplyr::vars(dplyr::starts_with("abundance_")), function(x){avg_protein_abundance / sum(x)})
+                      dplyr::mutate_at(dplyr::vars(dplyr::starts_with("abundance_")), function(x){x*(avg_protein_abundance / sum(x))})
 
 #
 avg_peptide_abundance = filtered_peptides %>%
@@ -133,10 +133,21 @@ avg_peptide_abundance = filtered_peptides %>%
 
 #
 normalized_peptides = filtered_peptides %>%
-                      dplyr::mutate_at(dplyr::vars(dplyr::starts_with("abundance_")), function(x){avg_peptide_abundance / sum(x)})
+                      dplyr::mutate_at(dplyr::vars(dplyr::starts_with("abundance_")), function(x){x*(avg_peptide_abundance / sum(x))})
 ```
 
 ## Exploratory Data Analysis {#sec-eda}
+
+Now that we have normalized our data, we can get a sense for what it looks like. 
+
+```{r}
+#
+normalized_proteins %>%
+  dplyr::select(dplyr::starts_with("abundance_")) %>%
+  magrittr::extract(c(1, 7)) %>%
+  log() %>%
+  plot(xlab = "KO mouse abundance", ylab = "WT mouse abundance")
+```
 
 ## Statistical testing {#sec-stattest}
 
