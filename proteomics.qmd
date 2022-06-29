@@ -114,8 +114,26 @@ While we are certainly interested in comparing the difference in abundance for i
 
 ```{r}
 #
+avg_protein_abundance = filtered_proteins %>%
+                        dplyr::select(dplyr::starts_with("abundance_")) %>%
+                        magrittr::set_colnames(paste0("Mouse ", 1:11)) %>%
+                        colSums() %>%
+                        mean()
+
+#
 normalized_proteins = filtered_proteins %>%
-                      dplyr::mutate_at(dplyr::vars(dplyr::starts_with("abundance_")), function(x){x / sum(x)})
+                      dplyr::mutate_at(dplyr::vars(dplyr::starts_with("abundance_")), function(x){avg_protein_abundance / sum(x)})
+
+#
+avg_peptide_abundance = filtered_peptides %>%
+                        dplyr::select(dplyr::starts_with("abundance_")) %>%
+                        magrittr::set_colnames(paste0("Mouse ", 1:11)) %>%
+                        colSums() %>%
+                        mean()
+
+#
+normalized_peptides = filtered_peptides %>%
+                      dplyr::mutate_at(dplyr::vars(dplyr::starts_with("abundance_")), function(x){avg_peptide_abundance / sum(x)})
 ```
 
 ## Exploratory Data Analysis {#sec-eda}
