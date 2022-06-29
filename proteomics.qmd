@@ -4,8 +4,6 @@
 
 This section template is designed to give a step-by-step walk-through of the data analysis performed in @lyons_proteomics_2022, which served as a companion manuscript to @wilson_disruption_2022. The goal of the analysis was to determine the effects of STIM1 knockout (KO) on protein abundance and sites of protein phosphorylation in gastrocnemius muscle tissue using data from large-scale proteomics and phosphoproteomics experiments. The data considered here consist of protein abundance values obtained from five STIM<sup>fl/fl</sup> mice and five STIM<sup>-/-</sup> mice. The code used in this section is based on the R code accompanying the @lyons_proteomics_2022 article.
 
-Part of the goal of this section is to identify common steps in analyzing 'omics datasets, to organize them in an understandable way, and to provide examples of how to perform the analysis steps using R.
-
 ## Before analysis {#sec-before}
 
 Depending on the nature of your experiment, you may be ready to analyze your data as soon as it comes off the machine, or there may be several steps of cleaning and pre-processing before it makes sense to draw conclusions from your data. This tutorial organizes the most common steps before data analysis into three categories: 1. loading the data, 2. filtering the data, and 3. normalizing the data.
@@ -15,9 +13,11 @@ Depending on the nature of your experiment, you may be ready to analyze your dat
 Before working with data in R, it needs to be loaded from the raw files that come off the machine (or other files that you have created) into R objects. In this tutorial we will be working with plain text files, which can be read with the R package `readr`. The package `readr` is part of a host of packages included in `tidyverse`, so we will load that, along with other packages, which will help us write concise code. Online documentation for all of these packages can be found in @sec-rdocs.
 
 ```{r, message=F, warning=F}
+#
 library(tidyverse)
 library(janitor)
 library(magrittr)
+
 ```
 
 Since the files we are working with here have a `.txt` extension and are tab-separated, we can use the `read_tsv` command in the `readr` package to load them into R:
@@ -51,6 +51,7 @@ Filtering data is the process of discarding pieces of a dataset that will not be
 In our example, we will first filter our data by extracting the columns we need. We'll store these names in an R object:
 
 ```{r}
+#
 columns_to_extract = list(cols_protein = janitor::make_clean_names(c("Description", "Accession", "Master", "Exp. q-value: Combined",
                                      "# Peptides", "# PSMs", "# Protein Unique Peptides", "# Unique Peptides", "Entrez Gene ID",
                                       "Reactome Pathways", "WikiPathways")),
@@ -64,15 +65,32 @@ columns_to_extract = list(cols_protein = janitor::make_clean_names(c("Descriptio
 Then we will filter the protein and peptide R objects so that we remove the columns we don't need:
 
 ```{r}
+#
 filtered_proteins = proteins %>%
                     janitor::clean_names() %>%
                     dplyr::select(., dplyr::all_of(columns_to_extract[["cols_protein"]]), dplyr::starts_with("abundance_F2_"))
 
+#
 filtered_peptides = peptides %>%
                     janitor::clean_names() %>%
                     dplyr::select(., dplyr::all_of(columns_to_extract[["cols_peptide"]]), dplyr::starts_with("abundance_F6_"))
 ```
 
+Next, we will filter the protein and peptide R objects so that we remove the rows we don't need:
+
+```{r}
+#
+filtered_proteins = filtered_proteins %>%
+                    dplyr::mutate(na_row_count = rowSums(is.na(select(., dplyr::starts_with("abundance"))))) %>%
+                    dplyr::filter(na_row_count <= 5) %>%
+                    dplyr::filter(master == "IsMasterProtein" & exp_q_value_combined < 0.01)
+
+#
+filtered_peptides = filtered_peptides %>%
+                    dplyr::mutate(na_row_count = rowSums(is.na(dplyr::select(., dplyr::starts_with("abundance"))))) %>%
+                    dplyr::filter(na_row_count <= 5)  %>%
+                    dplyr::filter(., grepl('Phospho', modifications))
+```
 
 ### Normalizing the data
 
@@ -80,6 +98,25 @@ Some form of normalization is frequently required before drawing conclusions fro
 
 1. **Batch effects:** The data that were recorded may have been subject to a systematic artifact that can be detected and potentially adjusted for.
 2. **Measurement scaling**: The raw values that are measured by the 'omics technology do not correspond directly to the underlying value that we are interested in. For instance, measurement devices may measure absolute abundance of a biological product such as a protein, transcript, or metabolite, whereas we may be interested in the *relative* abundance of that product. The absolute value may be a function of the experimental protocol, rather than a function of the relevant biology.
+
+In this tutorial, we will apply a simple normalization to address slight variations in total sample "loading" (i.e. $\mu \text{g}$ of peptide labeled). This variation can be seen in the plot below, where we show the total abundance (the sum of abundance across all proteins) for each mouse:
+
+```{r}
+#
+filtered_proteins %>%
+  dplyr::select(dplyr::starts_with("abundance_")) %>%
+  magrittr::set_colnames(paste0("Mouse ", 1:11)) %>%
+  colSums() %>%
+  barplot(ylab = "Total abundance")
+```
+
+While we are certainly interested in comparing the difference in abundance for individual proteins between the KO and WT mice, we do not have any a priori reason to believe that the *total* abundance should vary between mice. To normalize, we will simply divide each mouse's abundance levels by a ratio so that the total abundance is the same across mice.
+
+```{r}
+#
+normalized_proteins = filtered_proteins %>%
+                      dplyr::mutate_at(dplyr::vars(dplyr::starts_with("abundance_")), function(x){x / sum(x)})
+```
 
 ## Exploratory Data Analysis {#sec-eda}
 
@@ -94,7 +131,15 @@ $$
 H_1: m^{\text{WT}}_j \neq m^{\text{KO}}_j.
 $$
 
-We will use a version of the two-sample $t$-test to decide this question for each protein.
+We will use a version of the two-sample $t$-test as implemented in the R package `limma` (see @sec-rdocs for info) to decide this question for each protein. The classical t-statistic for the $j^\text{th}$ protein is computed as
+$$
+t_j = \frac{\hat{m}_j^\text{KO} - \hat{m}_j^\text{WT}}{\hat{\sigma}_j},
+$$
+where $\hat{m}_j^\text{KO}, \hat{m}_j^\text{WT}$ are the mean abundance for protein $j$ in the KO and WT groups, respectively, and $\hat{\sigma}_j$ is the pooled standard deviation of the abundance measurements for protein $j$. Here "pooled" refers to the fact that it is usually assumed that the variances of the KO and WT measurements are the same, so we can combine the data from both groups to estimate the measurement variability.
+
+The $t$ statistic used in the `limma` package is close to the classical one, but it uses a different estimate of the measurement variability, which "shrinks" each $\hat{\sigma}_j$ towards an average value $\bar{\sigma}$ that is estimated from the entire dataset (i.e. all proteins). The motivation behind using this modification to the classical procedure is that estimates of measurement variability can be poor if the sample size is small. In this tutorial, there are only 5 mice in each of the KO and WT samples, so indeed the sample standard deviation is not a very precise estimate of the true measurement variability. By shrinking towards the overall average standard deviation $\bar{\sigma}$, the estimate used by the `limma` package is reducing the imprecision of $\hat{\sigma}_j$. This type of approach to estimation and hypothesis testing falls under the umbrella of "empirical Bayes."
 
 ## Statistical language {#sec-statlang}
+
+Tests for differential protein abundance were performed using the `lmFit` and `eBayes` functions in the R package `limma` [@ritchie_limma_2015; @phipson_robust_2016]. Statistical significance for each test was assessed with an adjusted p-value, computed from the raw p-values using the Benjamini-Hochberg procedure [@benjamini_controlling_1995]. 
 

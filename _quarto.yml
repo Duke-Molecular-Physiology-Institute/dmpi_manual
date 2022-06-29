@@ -9,9 +9,7 @@ book:
     chapters: true
   chapters:
     - index.qmd
-    - intro.qmd
     - proteomics.qmd
-    - summary.qmd
     - resources.qmd
     - references.qmd
 

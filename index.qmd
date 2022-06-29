@@ -1,5 +1,7 @@
 # Preface {.unnumbered}
 
-This is a Quarto book.
+This is a data analysis handbook for the [Duke Moleculary Physiology Institute (DMPI)](https://dmpi.duke.edu). The goal of this document is to identify common steps in analyzing 'omics datasets, to organize them in an understandable way, and to provide examples of how to perform the analysis steps using R.
 
-To learn more about Quarto books visit <https://quarto.org/docs/books>.
+For now, the content of this handbook is organized by screening technology, and the idea is to populate each section with analysis vignettes that illustrate basic statistical techniques that may be applied.
+
+This handbook was authored using Quarto. To learn more about Quarto books visit <https://quarto.org/docs/books>.
