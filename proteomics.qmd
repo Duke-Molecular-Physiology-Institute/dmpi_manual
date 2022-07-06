@@ -60,11 +60,7 @@ columns_to_extract = list(cols_protein = janitor::make_clean_names(c("Descriptio
                                              "Modifications", "Modifications in Proteins", "XCorr (by Search Engine): Sequest HT",
                                              "Deltam/z [Da] (by Search Engine): Sequest HT"
                                              )))
-```
 
-Then we will filter the protein and peptide R objects so that we remove the columns we don't need:
-
-```{r}
 #
 filtered_proteins = proteins %>%
                     janitor::clean_names() %>%
@@ -90,6 +86,19 @@ filtered_peptides = filtered_peptides %>%
                     dplyr::mutate(na_row_count = rowSums(is.na(dplyr::select(., dplyr::starts_with("abundance"))))) %>%
                     dplyr::filter(na_row_count <= 5)  %>%
                     dplyr::filter(., grepl('Phospho', modifications))
+```
+
+Finally, we will add a column containing the gene names associated to each protein. This will help us with quick inspections of results after we conduct our analyses. We will use the R package `stringr` to manipulate the character strings 
+
+```{r}
+gene_names = stringr::str_split_fixed(filtered_proteins$description, "GN=",2) %>%
+             as.data.frame() %>%
+             magrittr::extract2(2) %>%
+             stringr::str_split_fixed("PE=", 2) %>%
+             as.data.frame() %>%
+             magrittr::extract2(1) %>%
+             stringr::str_replace_all(pattern = " ", replacement = "")
+filtered_proteins = cbind(gene_name = gene_names, filtered_proteins)
 ```
 
 ### Normalizing the data
@@ -136,9 +145,20 @@ normalized_peptides = filtered_peptides %>%
                       dplyr::mutate_at(dplyr::vars(dplyr::starts_with("abundance_")), function(x){x*(avg_peptide_abundance / sum(x))})
 ```
 
+Now, by design, the total normalized protein abundance will be the same across mice:
+
+```{r}
+#
+normalized_proteins %>%
+  dplyr::select(dplyr::starts_with("abundance_")) %>%
+  magrittr::set_colnames(paste0("Mouse ", 1:11)) %>%
+  colSums() %>%
+  barplot(ylab = "Total normalized abundance")
+```
+
 ## Exploratory Data Analysis {#sec-eda}
 
-Now that we have normalized our data, we can get a sense for what it looks like. 
+Now that we have normalized our data, we can get a sense for what it looks like. Since we are interested in differences in protein abundance between WT and KO mice, it may be good to start with a plot that helps us visualize that difference. In the next section, we will perform statistical tests between the two groups of mice; for now, we can simply choose two mice, one WT and one KO, and plot their protein abundances against one another:
 
 ```{r}
 #
@@ -147,7 +167,23 @@ normalized_proteins %>%
   magrittr::extract(c(1, 7)) %>%
   log() %>%
   plot(xlab = "KO mouse abundance", ylab = "WT mouse abundance")
+abline(0, 1, lty = 2)
 ```
+
+How do we interpret this plot? In terms of our research question, the dots that lie far away from the dotted line represent those proteins whose abundance differs the most between WT and KO mice. However, the key trend is that the abundance of most proteins is very similar in WT and KO mice. This makes sense, since we do not expect STIM1 knockout to have an effect on the entire mouse proteome.
+
+For comparison, consider this plot of one WT mouse versus another:
+
+```{r}
+normalized_proteins %>%
+  dplyr::select(dplyr::starts_with("abundance_")) %>%
+  magrittr::extract(c(7, 8)) %>%
+  log() %>%
+  plot(xlab = "WT mouse 1 abundance", ylab = "WT mouse 2 abundance")
+abline(0, 1, lty = 2)
+```
+
+While there is more dispersion away from the dotted line in the WT/KO plot compared to this one, we can see that there is still some variation in abundance within the WT mouse group. This raises the important question: how do we distinguish between within-group variation and the variation due to STIM1 knockout?
 
 ## Statistical testing {#sec-stattest}
 
@@ -167,6 +203,10 @@ $$
 where $\hat{m}_j^\text{KO}, \hat{m}_j^\text{WT}$ are the mean abundance for protein $j$ in the KO and WT groups, respectively, and $\hat{\sigma}_j$ is the pooled standard deviation of the abundance measurements for protein $j$. Here "pooled" refers to the fact that it is usually assumed that the variances of the KO and WT measurements are the same, so we can combine the data from both groups to estimate the measurement variability.
 
 The $t$ statistic used in the `limma` package is close to the classical one, but it uses a different estimate of the measurement variability, which "shrinks" each $\hat{\sigma}_j$ towards an average value $\bar{\sigma}$ that is estimated from the entire dataset (i.e. all proteins). The motivation behind using this modification to the classical procedure is that estimates of measurement variability can be poor if the sample size is small. In this tutorial, there are only 5 mice in each of the KO and WT samples, so indeed the sample standard deviation is not a very precise estimate of the true measurement variability. By shrinking towards the overall average standard deviation $\bar{\sigma}$, the estimate used by the `limma` package is reducing the imprecision of $\hat{\sigma}_j$. This type of approach to estimation and hypothesis testing falls under the umbrella of "empirical Bayes."
+
+```{r}
+
+```
 
 ## Statistical language {#sec-statlang}
 

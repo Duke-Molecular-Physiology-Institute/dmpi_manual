@@ -6,4 +6,5 @@
 - [limma](https://www.bioconductor.org/packages/devel/bioc/vignettes/limma/inst/doc/usersguide.pdf)
 - [magrittr](https://magrittr.tidyverse.org)
 - [readr](https://readr.tidyverse.org)
+- [stringr](https://www.rdocumentation.org/packages/stringr/versions/1.4.0)
 - [tidyverse](https://www.tidyverse.org/packages/)
