@@ -9,7 +9,10 @@ book:
     chapters: true
   chapters:
     - index.qmd
+    - cytometry.qmd
+    - metabolomics.qmd
     - proteomics.qmd
+    - rnaseq.qmd
     - resources.qmd
     - references.qmd
 

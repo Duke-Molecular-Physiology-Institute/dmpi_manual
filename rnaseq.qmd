@@ -1,0 +1,5 @@
+# RNAseq {#sec-rnaseq}
+
+This chapter will focus on RNAseq workflows
+
+## Mixed effects models
