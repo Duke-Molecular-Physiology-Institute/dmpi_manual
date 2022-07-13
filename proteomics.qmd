@@ -264,7 +264,7 @@ limma::volcanoplot(limma_fit, coef = 2, highlight = 5, names = row.names(y))
 
 ### Interpreting the results
 
-Looking at the results, we can see that STIM1 is the gene whose log normalized abundance differs the most between the WT and KO groups. This is reassuring, since STIM1 was the target of the knockout. The gene MGST3 also appears to have a significantly lower abundance in the KO group compared to WT. By contrast, genes IGFBP5 and CACYBP appear to be more abundant in the KO mice vs. the WT mice.
+Looking at the results, we can see that STIM1 is the gene whose log normalized abundance differs the most between the WT and KO groups. This is reassuring, since STIM1 was the target of the knockout. The gene MGST3 also appears to have a significantly lower abundance in the KO group compared to WT. By contrast, genes IGFBP5 and CACYBP appear to be more abundant in the KO mice vs. the WT mice. Both of these genes were identified in the @wilson_disruption_2022 study.
 
 ## Statistical language {#sec-statlang}
 
