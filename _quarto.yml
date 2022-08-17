@@ -9,10 +9,12 @@ book:
     chapters: true
   chapters:
     - index.qmd
-    - cytometry.qmd
-    - metabolomics.qmd
-    - proteomics.qmd
-    - rnaseq.qmd
+    - reading_writing.qmd
+    - normalization.qmd
+    - batch_correction.qmd
+    - design_matrices.qmd
+    - two_sample.qmd
+    - mixed_effects.qmd
     - resources.qmd
     - references.qmd
 

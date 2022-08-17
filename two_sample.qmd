@@ -1,0 +1,271 @@
+# Two-sample testing
+
+## Introduction {#sec-intro}
+
+This section template is designed to give a step-by-step walk-through of the data analysis performed in @lyons_proteomics_2022, which served as a companion manuscript to @wilson_disruption_2022. The goal of the analysis was to determine the effects of STIM1 knockout (KO) on protein abundance and sites of protein phosphorylation in gastrocnemius muscle tissue using data from large-scale proteomics and phosphoproteomics experiments. The data considered here consist of protein abundance values obtained from five STIM<sup>fl/fl</sup> mice and five STIM<sup>-/-</sup> mice. The code used in this section is based on the R code accompanying the @lyons_proteomics_2022 article.
+
+## Before analysis {#sec-before}
+
+Depending on the nature of your experiment, you may be ready to analyze your data as soon as it comes off the machine, or there may be several steps of cleaning and pre-processing before it makes sense to draw conclusions from your data. This tutorial organizes the most common steps before data analysis into three categories: 1. loading the data, 2. filtering the data, and 3. normalizing the data.
+
+### Loading the data into R
+
+Before working with data in R, it needs to be loaded from the raw files that come off the machine (or other files that you have created) into R objects. In this tutorial we will be working with plain text files, which can be read with the R package `readr`. The package `readr` is part of a host of packages included in `tidyverse`, so we will load that, along with other packages, which will help us write concise code. Online documentation for all of these packages can be found in @sec-rdocs.
+
+```{r, message=F, warning=F}
+#
+library(tidyverse)
+library(janitor)
+library(magrittr)
+
+```
+
+Since the files we are working with here have a `.txt` extension and are tab-separated, we can use the `read_tsv` command in the `readr` package to load them into R:
+
+```{r, message=F, warning=F}
+# load mito_carta file for mitochondria data
+mito_carta = readr::read_tsv("data/Mouse.MitoCarta3.0.txt")
+colnames(mito_carta)[[1]] = "GeneName"
+  
+# load the peptide and protein data
+peptides = readr::read_tsv("data/Muoio_BeckyWilson_STIM1-SKM_TMT10_FINAL_2020-05-03_SN2pt5_PeptideIsoforms.txt")
+proteins = readr::read_tsv("data/Muoio_BeckyWilson_STIM1-SKM_TMT10_FINAL_2020-05-03_SN2pt5_Proteins.txt")
+
+# create variables for the samples being compared and the total number of samples
+ID_names = c("WT", "KO", "pool")
+total_number_of_samples = 11
+```
+
+Note that the `readr::read_tsv` syntax above is overkill; once we load the `tidyverse` library, we can use functions within an R package without specifying the package name. However, in a tutorial like this, writing out the package name can help with understanding where each function comes from. Doing so also provides a visual cue that we are using a function from an R package.
+
+Once you have loaded your data into an R object, it is always a good idea to visually inspect the R object to determine whether the data have been loaded correctly. You can preview tabular R objects, like the `proteins` object above, using the `View()` command as follows:
+
+```{r, eval=F}
+View(proteins)
+```
+
+### Filtering the data
+
+Filtering data is the process of discarding pieces of a dataset that will not be used in subsequent normalization or analysis steps. It is a conceptually trivial step that can, in practice, take a fair amount of care, consideration, and time. The basic principle is that if some part of your primary dataset will not be used in subsequent steps, it is a good idea to trim this part from the R objects you are using to store your data.
+
+In our example, we will first filter our data by extracting the columns we need. We'll store these names in an R object:
+
+```{r}
+#
+columns_to_extract = list(cols_protein = janitor::make_clean_names(c("Description", "Accession", "Master", "Exp. q-value: Combined",
+                                     "# Peptides", "# PSMs", "# Protein Unique Peptides", "# Unique Peptides", "Entrez Gene ID",
+                                      "Reactome Pathways", "WikiPathways")),
+                          cols_peptide = janitor::make_clean_names(c("Master Protein Accessions", "Protein Accessions", "Sequence",
+                                             "# Missed Cleavages", "PSM Ambiguity", "# PSMs", 
+                                             "Modifications", "Modifications in Proteins", "XCorr (by Search Engine): Sequest HT",
+                                             "Deltam/z [Da] (by Search Engine): Sequest HT"
+                                             )))
+
+#
+filtered_proteins = proteins %>%
+                    janitor::clean_names() %>%
+                    dplyr::select(., dplyr::all_of(columns_to_extract[["cols_protein"]]), dplyr::starts_with("abundance_F2_"))
+
+#
+filtered_peptides = peptides %>%
+                    janitor::clean_names() %>%
+                    dplyr::select(., dplyr::all_of(columns_to_extract[["cols_peptide"]]), dplyr::starts_with("abundance_F6_"))
+```
+
+Next, we will filter the protein and peptide R objects so that we remove the rows we don't need:
+
+```{r}
+#
+filtered_proteins = filtered_proteins %>%
+                    dplyr::mutate(na_row_count = rowSums(is.na(select(., dplyr::starts_with("abundance"))))) %>%
+                    dplyr::filter(na_row_count <= 5) %>%
+                    dplyr::filter(master == "IsMasterProtein" & exp_q_value_combined < 0.01)
+
+#
+filtered_peptides = filtered_peptides %>%
+                    dplyr::mutate(na_row_count = rowSums(is.na(dplyr::select(., dplyr::starts_with("abundance"))))) %>%
+                    dplyr::filter(na_row_count <= 5)  %>%
+                    dplyr::filter(., grepl('Phospho', modifications))
+```
+
+Finally, we will add a column containing the gene names associated to each protein. This will help us with quick inspections of results after we conduct our analyses. We will use the R package `stringr` to manipulate the character strings 
+
+```{r}
+gene_names = stringr::str_split_fixed(filtered_proteins$description, "GN=",2) %>%
+             as.data.frame() %>%
+             magrittr::extract2(2) %>%
+             stringr::str_split_fixed("PE=", 2) %>%
+             as.data.frame() %>%
+             magrittr::extract2(1) %>%
+             stringr::str_replace_all(pattern = " ", replacement = "")
+filtered_proteins = cbind(gene_name = gene_names, filtered_proteins)
+```
+
+### Normalizing the data
+
+Some form of normalization is frequently required before drawing conclusions from 'omics datasets. There are two primary reasons for this: 
+
+1. **Batch effects:** The data that were recorded may have been subject to a systematic artifact that can be detected and potentially adjusted for.
+2. **Measurement scaling**: The raw values that are measured by the 'omics technology do not correspond directly to the underlying value that we are interested in. For instance, measurement devices may measure absolute abundance of a biological product such as a protein, transcript, or metabolite, whereas we may be interested in the *relative* abundance of that product. The absolute value may be a function of the experimental protocol, rather than a function of the relevant biology.
+
+In this tutorial, we will apply a simple normalization to address slight variations in total sample "loading" (i.e. $\mu \text{g}$ of peptide labeled). This variation can be seen in the plot below, where we show the total abundance (the sum of abundance across all proteins) for each mouse:
+
+```{r}
+#
+filtered_proteins %>%
+  dplyr::select(dplyr::starts_with("abundance_")) %>%
+  magrittr::set_colnames(paste0("Mouse ", 1:11)) %>%
+  colSums() %>%
+  barplot(ylab = "Total abundance")
+```
+
+While we are certainly interested in comparing the difference in abundance for individual proteins between the KO and WT mice, we do not have any a priori reason to believe that the *total* abundance should vary between mice. To normalize, we will simply divide each mouse's abundance levels by a ratio so that the total abundance is the same across mice.
+
+```{r}
+#
+avg_protein_abundance = filtered_proteins %>%
+                        dplyr::select(dplyr::starts_with("abundance_")) %>%
+                        magrittr::set_colnames(paste0("Mouse ", 1:11)) %>%
+                        colSums() %>%
+                        mean()
+
+#
+normalized_proteins = filtered_proteins %>%
+                      dplyr::mutate_at(dplyr::vars(dplyr::starts_with("abundance_")), function(x){x*(avg_protein_abundance / sum(x))})
+
+#
+avg_peptide_abundance = filtered_peptides %>%
+                        dplyr::select(dplyr::starts_with("abundance_")) %>%
+                        magrittr::set_colnames(paste0("Mouse ", 1:11)) %>%
+                        colSums() %>%
+                        mean()
+
+#
+normalized_peptides = filtered_peptides %>%
+                      dplyr::mutate_at(dplyr::vars(dplyr::starts_with("abundance_")), function(x){x*(avg_peptide_abundance / sum(x))})
+```
+
+Now, by design, the total normalized protein abundance will be the same across mice:
+
+```{r}
+#
+normalized_proteins %>%
+  dplyr::select(dplyr::starts_with("abundance_")) %>%
+  magrittr::set_colnames(paste0("Mouse ", 1:11)) %>%
+  colSums() %>%
+  barplot(ylab = "Total normalized abundance")
+```
+
+## Exploratory Data Analysis {#sec-eda}
+
+Now that we have normalized our data, we can get a sense for what it looks like. Since we are interested in differences in protein abundance between WT and KO mice, it may be good to start with a plot that helps us visualize that difference. In the next section, we will perform statistical tests between the two groups of mice; for now, we can simply choose two mice, one WT and one KO, and plot their protein abundances against one another:
+
+```{r}
+#
+normalized_proteins %>%
+  dplyr::select(dplyr::starts_with("abundance_")) %>%
+  magrittr::extract(c(1, 7)) %>%
+  log() %>%
+  plot(xlab = "KO mouse abundance", ylab = "WT mouse abundance")
+abline(0, 1, lty = 2)
+```
+
+How do we interpret this plot? In terms of our research question, the dots that lie far away from the dotted line represent those proteins whose abundance differs the most between WT and KO mice. However, the key trend is that the abundance of most proteins is very similar in WT and KO mice. This makes sense, since we do not expect STIM1 knockout to have an effect on the entire mouse proteome.
+
+For comparison, consider this plot of one WT mouse versus another:
+
+```{r}
+normalized_proteins %>%
+  dplyr::select(dplyr::starts_with("abundance_")) %>%
+  magrittr::extract(c(7, 8)) %>%
+  log() %>%
+  plot(xlab = "WT mouse 1 abundance", ylab = "WT mouse 2 abundance")
+abline(0, 1, lty = 2)
+```
+
+While there is more dispersion away from the dotted line in the WT/KO plot compared to this one, we can see that there is still some variation in abundance within the WT mouse group. This raises the important question: how do we distinguish between within-group variation and the variation due to STIM1 knockout?
+
+## Statistical testing {#sec-stattest}
+
+In this tutorial, we are interested in testing the difference in protein abundance between WT and STIM1 KO mice. The two types of mice represent two distinct populations, and the specific mice used in our experiment are a small sample from these populations. For a given protein---let's call it protein $j$---we would like to know whether the population average abundance among WT mice is the same or different than the population average abundance among STIM1 KO mice. We can resolve this question by testing the null hypothesis that says the average abundances are the same:
+$$
+H_0: m^{\text{WT}}_j = m^{\text{KO}}_j,
+$$
+versus the alternative hypothesis, which says they are different:
+$$
+H_1: m^{\text{WT}}_j \neq m^{\text{KO}}_j.
+$$
+
+We will use a version of the two-sample $t$-test as implemented in the R package `limma` (see @sec-rdocs for info) to decide this question for each protein. The classical t-statistic for the $j^\text{th}$ protein is computed as
+$$
+t_j = \frac{\hat{m}_j^\text{KO} - \hat{m}_j^\text{WT}}{\hat{\sigma}_j},
+$$
+where $\hat{m}_j^\text{KO}, \hat{m}_j^\text{WT}$ are the mean abundance for protein $j$ in the KO and WT groups, respectively, and $\hat{\sigma}_j$ is the pooled standard deviation of the abundance measurements for protein $j$. Here "pooled" refers to the fact that it is usually assumed that the variances of the KO and WT measurements are the same, so we can combine the data from both groups to estimate the measurement variability.
+
+The $t$ statistic used in the `limma` package is close to the classical one, but it uses a different estimate of the measurement variability, which "shrinks" each $\hat{\sigma}_j$ towards an average value $\bar{\sigma}$ that is estimated from the entire dataset (i.e. all proteins). The motivation behind using this modification to the classical procedure is that estimates of measurement variability can be poor if the sample size is small. In this tutorial, there are only 5 mice in each of the KO and WT samples, so indeed the sample standard deviation is not a very precise estimate of the true measurement variability. By shrinking towards the overall average standard deviation $\bar{\sigma}$, the estimate used by the `limma` package is reducing the imprecision of $\hat{\sigma}_j$. This type of approach to estimation and hypothesis testing falls under the umbrella of "empirical Bayes" (EB).
+
+### Empirical Bayes $t$-tests with `limma`
+
+We will perform an EB version of a two-sample $t$-test using the `lmFit` and `eBayes` commands in the R package `limma`. The `lmFit` function can do more than perform $t$-tests (see @sec-rnaseq), so its arguments may seem more complicated than expected. Here's what we need:
+
+1. A data matrix with analyte identifiers on the rows and experimental units on the columns. In our case, this matrix will have the mouse gene/protein names on the rows and the WT/KO mouse identifiers on the columns. The values in the matrix will be log-scale (normalized) protein abundance.
+2. A so-called "design matrix," which tells `lmFit` how to treat the columns of the data matrix. To perform a two-sample $t$-test, this matrix should have two columns; the first should contain all 1's and the second should contain 1's and 0's indicating the group to which the experimental units belong. In our case, the design matrix should look like the table below because the first 5 columns of our data matrix will contain the data from the KO mice, and the last 5 will contain the data from the WT mice.
+
+| WT | KO vs. WT |
+|----|-----------|
+| 1  | 1         |
+| 1  | 1         |
+| 1  | 1         |
+| 1  | 1         |
+| 1  | 1         |
+| 1  | 0         |
+| 1  | 0         |
+| 1  | 0         |
+| 1  | 0         |
+| 1  | 0         |
+
+
+Here is the code creating the objects we just described:
+
+```{r}
+#
+y = normalized_proteins %>%
+      dplyr::select(gene_name, dplyr::contains("abundance_"), -dplyr::contains("pool")) %>%
+      dplyr::distinct(gene_name, .keep_all = T) %>%
+      magrittr::set_rownames(., magrittr::extract2(., "gene_name")) %>%
+      dplyr::select(-gene_name) %>%
+      as.matrix() %>%
+      log()
+design_proteins = cbind(WT = 1, KOvsWT = c(rep(1, 5), rep(0, 5)))
+```
+
+
+Now we're ready to run our $t$-tests. Note that these `limma` functions will perform $t$-tests *for each gene* in our dataset automatically.
+
+```{r}
+#
+limma_fit = limma::lmFit(y, design_proteins) %>% limma::eBayes()
+```
+
+The object `limma_fit` now contains the results from our $t$-tests. We can choose several ways of displaying these results, some of which are conveniently available within the `limma` package. We can output a table of results using the `topTable` function (rounded to 6 digits for display purposes only):
+
+```{r}
+#
+limma::topTable(limma_fit, coef = 2, number = 10, adjust.method = "BH") %>% round(6)
+```
+
+We can also display the results visually with a "volcano plot:"
+
+```{r}
+#
+limma::volcanoplot(limma_fit, coef = 2, highlight = 5, names = row.names(y))
+```
+
+### Interpreting the results
+
+Looking at the results, we can see that STIM1 is the gene whose log normalized abundance differs the most between the WT and KO groups. This is reassuring, since STIM1 was the target of the knockout. The gene MGST3 also appears to have a significantly lower abundance in the KO group compared to WT. By contrast, genes IGFBP5 and CACYBP appear to be more abundant in the KO mice vs. the WT mice. Both of these genes were identified in the @wilson_disruption_2022 study.
+
+## Statistical language {#sec-statlang}
+
+Tests for differential protein abundance were performed using the `lmFit` and `eBayes` functions in the R package `limma` [@ritchie_limma_2015; @phipson_robust_2016]. Statistical significance for each test was assessed with an adjusted p-value, computed from the raw p-values using the Benjamini-Hochberg procedure [@benjamini_controlling_1995].
+
