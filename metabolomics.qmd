@@ -1,5 +1,0 @@
-# Metabolomics
-
-This chapter will focus on metabolomic data. Pol's R package [POMA](https://github.com/pcastellanoescuder/POMA).
-
-## Comparing proportions between groups
